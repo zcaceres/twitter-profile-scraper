@@ -73,13 +73,12 @@ const ALL_REGEXES = [
 
 exports.handler = scrape
 
-scrape({ vars: { url: 'https://twitter.com/zachcaceres' } }, console.log, console.error)
-
 async function scrape (event, done, fail) {
   const {
     url
   } = event.vars
   if (!url) return fail('Must specify url')
+  if (!url.includes('http')) return fail('Must use fully-qualified url with protocol (https://url.com)')
   try {
     const res = await axios.get(url)
     const dom = toJSDOM(res.data)
@@ -89,6 +88,7 @@ async function scrape (event, done, fail) {
     fail(e)
   }
 }
+
 function analyze(bodyDOM) {
   const titleTag = getTitleTag(bodyDOM)
   const headScripts = getHeadScripts(bodyDOM)
