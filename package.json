@@ -4,6 +4,7 @@
   "description": "Scrape a Twitter profile",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -15,5 +16,12 @@
   "bugs": {
     "url": "https://github.com/zcaceres/twitter-profile-scraper/issues"
   },
-  "homepage": "https://github.com/zcaceres/twitter-profile-scraper#readme"
+  "homepage": "https://github.com/zcaceres/twitter-profile-scraper#readme",
+  "dependencies": {
+    "axios": "^0.19.0",
+    "jsdom": "^15.1.1",
+    "lodash": "^4.17.15",
+    "proxycrawl": "^1.3.0",
+    "validator": "^11.1.0"
+  }
 }
