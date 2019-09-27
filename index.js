@@ -5,6 +5,8 @@ const validator = require('validator');
 const jsdom = require("jsdom")
 const { JSDOM } = jsdom
 
+const TEST_STR = 'hello i am a profile with www.twitter.com/zach github.com/zach https://github.com/zach www.zach.dev other stuff zach.dev hello@gmail.com www.clay.run/more-stuff-here also @sarasanchezgt @substack #Hashtag #iamahashtag #supercool'
+
 // @see https://gist.github.com/dperini/729294
 const regexWebsite = new RegExp(
   "^" +
@@ -67,7 +69,6 @@ const ALL_REGEXES = [
   { regex: regexYoutubeUrl, type: 'youtube' },
   { regex: regexAlibabaUrl, type: 'alibaba' },
   { regex: regexGithubUrl, type: 'github' },
-  { regex: regexWebsite, type: 'website' }
 ]
 
 exports.handler = scrape
@@ -88,7 +89,6 @@ async function scrape (event, done, fail) {
     fail(e)
   }
 }
-
 function analyze(bodyDOM) {
   const titleTag = getTitleTag(bodyDOM)
   const headScripts = getHeadScripts(bodyDOM)
@@ -101,47 +101,62 @@ function analyze(bodyDOM) {
     ...getDescriptionFromMeta(meta)
   ]
   const twitter = getTwitterData(bodyDOM)
-  const associatedAccounts = {
-    ...getAssociatedAccounts(twitter.bio),
-    // GET ASSOCIATED WEBSITES
-  }
+  const associatedAccounts = getAssociatedAccounts(twitter.bio)
+  const associatedWebsites = getAssociatedWebsites(twitter.bio)
   const relatedEntities = getRelatedEntities(twitter.bio)
 
   const results = {
     titles: [titleTag].concat(metaTitles),
     descriptions,
     twitter,
+    associatedWebsites,
     associatedAccounts,
     relatedEntities
   }
   return results
 }
 
-function getAssociatedAccounts(text) {
-  const urls = text
+
+function getAssociatedWebsites(text) {
+  const isNotSocialMedia = url => ALL_REGEXES.every(({ regex }) => !regex.test(url))
+  return textToURLs(text).filter(isNotSocialMedia).map(url => ({ url, type: 'website' }))
+}
+
+function textToURLs(text) {
+  return text
     .split(' ')
     .map(str => str.trim())
     .filter(isURL)
+}
+
+function getAssociatedAccounts(text) {
+  const urls = textToURLs(text)
 
   const matches = ALL_REGEXES.map(({ regex, type }) => {
     return urls.filter(url => regex.test(url)).map(url => ({ url, type }))
   })
-  return matches
+
+  return _.flatten(matches)
 }
 
 function getRelatedEntities(text) {
   const regexTwitterAccounts = /@([a-zA-Z0-9_]+)/g
   const regexHashtags = /#[A-Za-z0-9]*/g
+
+  const accountMatches = text.match(regexTwitterAccounts).filter(isEmail)
+  const hashtagMatches = text.match(regexHashtags)
+
   return {
-    accounts: text.match(regexTwitterAccounts),
-    hashtags: text.match(regexHashtags)
+    accounts: accountMatches ? accountMatches : [],
+    hashtags: hashtagMatches ? hashtagMatches : []
   }
 }
+
+// TODO: GET 3 RECENT TWEETS
 
 function toJSDOM(responseBody) {
   return new JSDOM(responseBody);
 }
-
 
 function getTwitterData(bodyDOM) {
   const body = bodyDOM.window.document.body
@@ -226,15 +241,15 @@ function getDescriptionFromMeta(metaTags) {
 function getMatchingMetaContent(metaTags, matches) {
   return metaTags
     .filter(metaTag => (metaTag.content && matches.indexOf(metaTag.name) >= 0))
-    .map(metaTag => metaTag.content);
+    .map(metaTag => metaTag.content)
 }
 
 function isURL(urlStr) {
   return validator.isURL(urlStr, {
     allow_underscores: true
-  });
+  })
 }
 
-function nodeListToArray(nl) {
-  return Array.from(nl)
+function isEmail(str) {
+  return validator.isEmail(str)
 }
