@@ -1,0 +1,19 @@
+{
+  "name": "twitter-profile-scraper",
+  "version": "1.0.0",
+  "description": "Scrape a Twitter profile",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zcaceres/twitter-profile-scraper.git"
+  },
+  "author": "Zach Caceres @zachcaceres",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zcaceres/twitter-profile-scraper/issues"
+  },
+  "homepage": "https://github.com/zcaceres/twitter-profile-scraper#readme"
+}
