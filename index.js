@@ -73,6 +73,8 @@ const ALL_REGEXES = [
 
 exports.handler = scrape
 
+// scrape({ vars: { url: 'https://twitter.com/zachcaceres' } }, console.log, console.error)
+
 async function scrape (event, done, fail) {
   const {
     url
@@ -125,6 +127,7 @@ function getAssociatedWebsites(text) {
 function textToURLs(text) {
   return text
     .split(' ')
+    .map(str => str.replace(',', ''))
     .map(str => str.trim())
     .filter(isURL)
 }
@@ -143,11 +146,11 @@ function getRelatedEntities(text) {
   const regexTwitterAccounts = /@([a-zA-Z0-9_]+)/g
   const regexHashtags = /#[A-Za-z0-9]*/g
 
-  const accountMatches = text.match(regexTwitterAccounts).filter(isEmail)
+  const accountMatches = text.match(regexTwitterAccounts)
   const hashtagMatches = text.match(regexHashtags)
 
   return {
-    accounts: accountMatches ? accountMatches : [],
+    accounts: accountMatches ? accountMatches.filter(acct => !isEmail(acct)) : [],
     hashtags: hashtagMatches ? hashtagMatches : []
   }
 }
@@ -166,7 +169,7 @@ function getTwitterData(bodyDOM) {
     name: body.querySelector('.ProfileHeaderCard-nameLink').textContent.trim(),
     username: body.querySelector('.ProfileHeaderCard-screennameLink').textContent.trim(),
     location: body.querySelector('.ProfileHeaderCard-locationText').textContent.trim(),
-    website: body.querySelector('.ProfileHeaderCard-url').textContent.trim(),
+    website: { url: body.querySelector('.ProfileHeaderCard-url a').href, type: 'personal-website' },
     joinedDate: body.querySelector('.ProfileHeaderCard-joinDateText').textContent.trim(),
     tweetCount: Number(body.querySelector('.ProfileNav-item--tweets .ProfileNav-value').dataset.count),
     followingCount: Number(body.querySelector('.ProfileNav-item--following .ProfileNav-value').dataset.count),
