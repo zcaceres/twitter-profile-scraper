@@ -5,6 +5,71 @@ const validator = require('validator');
 const jsdom = require("jsdom")
 const { JSDOM } = jsdom
 
+// @see https://gist.github.com/dperini/729294
+const regexWebsite = new RegExp(
+  "^" +
+  // protocol identifier (optional)
+  // short syntax // still required
+  "(?:(?:(?:https?|ftp):)?\\/\\/)" +
+  // user:pass BasicAuth (optional)
+  "(?:\\S+(?::\\S*)?@)?" +
+  "(?:" +
+  // IP address exclusion
+  // private & local networks
+  "(?!(?:10|127)(?:\\.\\d{1,3}){3})" +
+  "(?!(?:169\\.254|192\\.168)(?:\\.\\d{1,3}){2})" +
+  "(?!172\\.(?:1[6-9]|2\\d|3[0-1])(?:\\.\\d{1,3}){2})" +
+  // IP address dotted notation octets
+  // excludes loopback network 0.0.0.0
+  // excludes reserved space >= 224.0.0.0
+  // excludes network & broadcast addresses
+  // (first & last IP address of each class)
+  "(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])" +
+  "(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}" +
+  "(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))" +
+  "|" +
+  // host & domain names, may end with dot
+  // can be replaced by a shortest alternative
+  // (?![-_])(?:[-\\w\\u00a1-\\uffff]{0,63}[^-_]\\.)+
+  "(?:" +
+  "(?:" +
+  "[a-z0-9\\u00a1-\\uffff]" +
+  "[a-z0-9\\u00a1-\\uffff_-]{0,62}" +
+  ")?" +
+  "[a-z0-9\\u00a1-\\uffff]\\." +
+  ")+" +
+  // TLD identifier name, may end with dot
+  "(?:[a-z\\u00a1-\\uffff]{2,}\\.?)" +
+  ")" +
+  // port number (optional)
+  "(?::\\d{2,5})?" +
+  // resource path (optional)
+  "(?:[/?#]\\S*)?" +
+  "$", "i"
+)
+const regexTwitterUrl = /(?:(?:http|https):\/\/)?(?:www\.)?twitter\.com\/([a-zA-Z0-9_]+)/g
+const regexFacebookUrl = /(?:(?:http|https):\/\/)?(?:www.)?facebook.com\/?/g
+const regexLinkedInUrl = /(?:(?:http|https):\/\/)?(?:www.)?linkedin.com\/?/g
+const regexInstagramUrl = /(?:(?:http|https):\/\/)?(?:www.)?instagram.com\/?/g
+const regexPinterestUrl = /(?:(?:http|https):\/\/)?(?:www.)?pinterest.com\/?/g
+const regexTumblrUrl = /(?:(?:http|https):\/\/)?(?:www.)?tumblr.com\/?/g
+const regexYoutubeUrl = /(?:(?:http|https):\/\/)?(?:www.)?youtube.com\/?/g
+const regexAlibabaUrl = /(?:(?:http|https):\/\/)?(?:www.)?alibaba.com\/?/g
+const regexGithubUrl = /(?:(?:http|https):\/\/)?(?:www.)?github.com\/?/g
+
+const ALL_REGEXES = [
+  { regex: regexTwitterUrl, type: 'twitter' },
+  { regex: regexFacebookUrl, type: 'facebook' },
+  { regex: regexLinkedInUrl, type: 'linkedin' },
+  { regex: regexInstagramUrl, type: 'instagram' },
+  { regex: regexPinterestUrl, type: 'pinterest' },
+  { regex: regexTumblrUrl, type: 'tumblr' },
+  { regex: regexYoutubeUrl, type: 'youtube' },
+  { regex: regexAlibabaUrl, type: 'alibaba' },
+  { regex: regexGithubUrl, type: 'github' },
+  { regex: regexWebsite, type: 'website' }
+]
+
 exports.handler = scrape
 
 scrape({ vars: { url: 'https://twitter.com/zachcaceres' } }, console.log, console.error)
@@ -36,20 +101,47 @@ function analyze(bodyDOM) {
     ...getDescriptionFromMeta(meta)
   ]
   const twitter = getTwitterData(bodyDOM)
+  const associatedAccounts = {
+    ...getAssociatedAccounts(twitter.bio),
+    // GET ASSOCIATED WEBSITES
+  }
+  const relatedEntities = getRelatedEntities(twitter.bio)
 
   const results = {
     titles: [titleTag].concat(metaTitles),
     descriptions,
     twitter,
-    associatedAccounts: [],
-    relatedEntities: [],
+    associatedAccounts,
+    relatedEntities
   }
   return results
+}
+
+function getAssociatedAccounts(text) {
+  const urls = text
+    .split(' ')
+    .map(str => str.trim())
+    .filter(isURL)
+
+  const matches = ALL_REGEXES.map(({ regex, type }) => {
+    return urls.filter(url => regex.test(url)).map(url => ({ url, type }))
+  })
+  return matches
+}
+
+function getRelatedEntities(text) {
+  const regexTwitterAccounts = /@([a-zA-Z0-9_]+)/g
+  const regexHashtags = /#[A-Za-z0-9]*/g
+  return {
+    accounts: text.match(regexTwitterAccounts),
+    hashtags: text.match(regexHashtags)
+  }
 }
 
 function toJSDOM(responseBody) {
   return new JSDOM(responseBody);
 }
+
 
 function getTwitterData(bodyDOM) {
   const body = bodyDOM.window.document.body
@@ -66,15 +158,6 @@ function getTwitterData(bodyDOM) {
     followerCount: Number(body.querySelector('.ProfileNav-item--followers .ProfileNav-value').dataset.count),
     likesCount: Number(body.querySelector('.ProfileNav-item--favorites .ProfileNav-value').dataset.count)
   }
-}
-
-function getAllScripts(bodyDOM) {
-  const head = nodeListToArray(bodyDOM.window.document.head.querySelectorAll('script'));
-  const body = nodeListToArray(bodyDOM.window.document.body.querySelectorAll('script'));
-  const footer = bodyDOM.window.document.querySelector('footer');
-  let footerScripts = [];
-  if (footer) footerScripts = footerScripts.concat(nodeListToArray(footer.querySelectorAll('script')));
-  return [...head, ...body, ...footerScripts];
 }
 
 function nodeListToArray(nl) {
@@ -120,11 +203,6 @@ function getMetaTags(bodyDOM) {
   return nodeListToArray(bodyDOM.window.document.head.querySelectorAll('meta'))
 }
 
-function getMailToAnchorTags(bodyDOM) {
-  const anchors = getElementsByTagName(bodyDOM, 'a')
-  return anchors.filter(anchor => anchor.href && anchor.href.includes('mailto:')).map(anchor => stripMailto(anchor.href))
-}
-
 function getElementsByTagName(bodyDOM, tagName) {
   return nodeListToArray(bodyDOM.window.document.querySelectorAll(tagName))
 }
@@ -145,103 +223,6 @@ function getDescriptionFromMeta(metaTags) {
   return getMatchingMetaContent(metaTags, ['description', 'og:description', 'twitter:description', 'keywords'])
 }
 
-function getCompanyNames(jsonld, titles, metaTitles) {
-  var companyNames = titles.slice()
-    .concat(getLegalName(jsonld))
-    .concat(getPublicName(jsonld))
-    .concat(getAlternateName(jsonld))
-  return companyNames
-}
-
-function getLegalName(jsonld) {
-  return jsonld.filter(entry => entry.legalName && typeof entry.legalName === 'string').map(entry => entry.legalName.trim())
-}
-
-function getAlternateName(jsonld) {
-  return jsonld.filter(entry => entry.alternateName && typeof entry.alternateName === 'string').map(entry => entry.alternateName.trim())
-}
-
-function getPublicName(jsonld) {
-  return jsonld.filter(entry => entry.name && typeof entry.name === 'string').map(entry => entry.name.trim())
-}
-
-function getBodyText(bodyDOM) {
-  return bodyDOM.window.document.body.textContent
-}
-
-function isGoodCompanyName(companyName) {
-  return companyName && ['your site title', 'home', 'squarespace', 'wordpress', 'shopify'].indexOf(companyName.toLowerCase()) === -1
-}
-
-function getPhones(jsonld) {
-  const phonesArr = [].concat(jsonld.filter(entry => entry.telephone && typeof entry.telephone === 'string').map(entry => entry.telephone.trim()))
-  return phonesArr
-}
-
-function getAddress(jsonld) {
-  var address = {}
-  var street
-  var city
-  var state
-  var zip
-  var country
-  var addressJsonlds = jsonld.filter(entry => entry.address)
-  var addrStr = addressJsonlds.filter(entry => typeof entry.address === 'string').map(entry => entry.address.trim())[0]
-  if (addrStr) {
-    street = addrStr.replace(/\s/g, ' ').trim() || street
-  } else {
-    street = addressJsonlds.map(entry => entry.address.streetAddress)[0] || street
-    city = addressJsonlds.map(entry => entry.address.addressLocality)[0] || city
-    state = addressJsonlds.map(entry => entry.address.addressRegion)[0] || state
-    zip = addressJsonlds.map(entry => entry.address.postalCode)[0] || zip
-    country = addressJsonlds.map(entry => entry.address.addressCountry)[0] || country
-  }
-  if (street && street.trim && street.trim()) address.street = street.trim()
-  if (city && city.trim && city.trim()) address.city = city.trim()
-  if (state && state.trim && state.trim()) address.state = state.trim()
-  if (zip && zip.trim && zip.trim()) address.zip = zip.trim()
-  if (country && country.trim && country.trim()) address.country = country.trim()
-  return address
-}
-
-function getSocialMedia(metaTags, jsonld) {
-  const socialObj = {}
-  const twitterName = getMatchingMetaContent(metaTags, ['twitter:site', 'twitter:creator'])[0]
-  if (twitterName) socialObj.twitter = twitterName
-  _.assign(socialObj, getSameAsProfiles(jsonld))
-  return socialObj
-}
-
-// TODO: look in body data for any img tag with class, alt or id that contains 'logo' or alt that is the company name
-function getLogoUrl(metaTags, jsonld) {
-  const logosArr = jsonld.filter(entry => entry.logo && typeof entry.logo === 'string').map(entry => entry.logo.trim())
-    .concat(metaTags.filter(meta => meta.name === 'og:image').map(meta => meta.content))
-  return logosArr.map(fixLogoUrl).filter(isURL) || []
-}
-
-function fixLogoUrl(urlStr) {
-  var toReturn = urlStr.slice()
-  if (toReturn.indexOf('//') === 0) toReturn = 'https:' + toReturn
-  return toReturn
-}
-
-function getSameAsProfiles(jsonld) {
-  var sameAsArr = _.flatten(jsonld.filter(entry => entry.sameAs && entry.sameAs === 'string').map(entry => entry.sameAs.trim()))
-  var profilesFound = {}
-  sameAsArr.forEach(function (sameAs) {
-    if (sameAs.includes('facebook.com')) profilesFound.facebook = sameAs
-    else if (sameAs.includes('github.com')) profilesFound.github = sameAs
-    else if (sameAs.includes('google.com')) profilesFound.google = sameAs
-    else if (sameAs.includes('instagram.com')) profilesFound.instagram = sameAs
-    else if (sameAs.includes('linkedin.com')) profilesFound.linkedin = sameAs
-    else if (sameAs.includes('pinterest.com')) profilesFound.pinterest = sameAs
-    else if (sameAs.includes('twitter.com')) profilesFound.twitter = sameAs
-    else if (sameAs.includes('vimeo.com')) profilesFound.vimeo = sameAs
-    else if (sameAs.includes('youtube.com')) profilesFound.youtube = sameAs
-  })
-  return profilesFound
-}
-
 function getMatchingMetaContent(metaTags, matches) {
   return metaTags
     .filter(metaTag => (metaTag.content && matches.indexOf(metaTag.name) >= 0))
@@ -252,24 +233,6 @@ function isURL(urlStr) {
   return validator.isURL(urlStr, {
     allow_underscores: true
   });
-}
-
-function getJSONLDContacts(jsonld) {
-  return jsonld.filter(entry => entry.email && typeof entry.email === 'string').map(function (entry) {
-    return {
-      email: stripMailto(entry.email),
-      source: 'scraper'
-    };
-  });
-}
-
-function stripMailto(str) {
-  return (str || '').replace('mailto:', '');
-}
-
-function getMailToAnchorTags(bodyDOM) {
-  const anchors = getElementsByTagName(bodyDOM, 'a');
-  return anchors.filter(anchor => anchor.href && anchor.href.includes('mailto:')).map(anchor => stripMailto(anchor.href));
 }
 
 function nodeListToArray(nl) {
